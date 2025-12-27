@@ -103,10 +103,23 @@ with tab_chatbot:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                reply = analyze_sebi_query(user_input)
-            st.markdown(reply)
+                result = analyze_sebi_query(user_input)
 
-        st.session_state.chat_history.append(("assistant", reply))
+            st.markdown(result["text"])
+
+            # ---- Case PDF downloads ----
+            if result["case_files"]:
+                st.markdown("**Download referenced case documents:**")
+                for case in result["case_files"]:
+                    with open(case["path"], "rb") as f:
+                        st.download_button(
+                            label=f"Download {case['label']}",
+                            data=f,
+                            file_name=f"{case['label']}.pdf",
+                            mime="application/pdf"
+                        )
+
+        st.session_state.chat_history.append(("assistant", result["text"]))
 
     # ---- Footer warning ----
     st.markdown(
@@ -229,4 +242,5 @@ with tab_chart:
         "⚠️ This analysis is indicative only, and may make mistakes. It does not constitute legal or investment advice."
         "</div>",
         unsafe_allow_html=True
+
     )
