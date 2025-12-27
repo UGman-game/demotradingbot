@@ -23,7 +23,7 @@ if not OPENROUTER_API_KEY:
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
-def call_openrouter(messages, model, max_tokens=900, temperature=0.4, top_p=0.9):
+def call_openrouter(messages, model, max_tokens=1500, temperature=0.35, top_p=0.9):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -48,5 +48,6 @@ def call_openrouter(messages, model, max_tokens=900, temperature=0.4, top_p=0.9)
             "This anomaly shows statistical deviation but requires "
             "additional market context to assess compliance impact."
         )
+
 
     return text.strip()
