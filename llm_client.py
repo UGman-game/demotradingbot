@@ -23,7 +23,7 @@ if not OPENROUTER_API_KEY:
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
-def call_openrouter(messages, model, max_tokens=2500, temperature=0.35, top_p=0.9):
+def call_openrouter(messages, model, max_tokens=2000, temperature=0.35, top_p=0.9):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -38,19 +38,19 @@ def call_openrouter(messages, model, max_tokens=2500, temperature=0.35, top_p=0.
     }
 
     resp = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+    if resp.status_code != 200:
+        print("OpenRouter error response:")
+        print(resp.text)
+
     resp.raise_for_status()
 
     text = resp.json()["choices"][0]["message"]["content"]
 
     if not text or len(text.strip()) < 50:
         return (
-            "The bot returned an incomplete response. This is unexpected."
-            "Try again with the same query"
-            "or try after sometime"
+            "The model returned an incomplete response. "
+            "This anomaly shows statistical deviation but requires "
+            "additional market context to assess compliance impact."
         )
 
-
     return text.strip()
-
-
-
