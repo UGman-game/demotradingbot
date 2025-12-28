@@ -13,8 +13,8 @@ import altair as alt
 
 from llm_client import call_openrouter
 
-MODEL_SEBI = "openai/gpt-oss-20b:free"
-MODEL_ANOMALY = "openai/gpt-oss-20b:free"
+MODEL_SEBI = "mistralai/mistral-7b-instruct:free"
+MODEL_ANOMALY = "mistralai/mistral-7b-instruct:free"
 
 FIXED_CONTAMINATION = 0.01
 CACHE_FILE = "explanations_cache.json"
@@ -326,3 +326,4 @@ Deviation from 20-day average: {row['ma_diff']}
     cache[key] = result
     json.dump(cache, open(CACHE_FILE, "w"), indent=2)
     return result
+
