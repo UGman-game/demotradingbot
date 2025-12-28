@@ -44,12 +44,13 @@ def call_openrouter(messages, model, max_tokens=2500, temperature=0.35, top_p=0.
 
     if not text or len(text.strip()) < 50:
         return (
-            "The model returned an incomplete response. "
-            "This anomaly shows statistical deviation but requires "
-            "additional market context to assess compliance impact."
+            "The bot returned an incomplete response. This is unexpected."
+            "Try again with the same query"
+            "or try after sometime"
         )
 
 
     return text.strip()
+
 
 
