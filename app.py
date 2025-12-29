@@ -16,7 +16,8 @@ from backend import (
     train_iforest,
     detect_anomalies,
     explain_anomaly,
-    analyze_sebi_query
+    analyze_sebi_query,
+    CHAT_MEMORY
 )
 
 # --------------------------------------------------
@@ -40,6 +41,12 @@ tab_chatbot, tab_chart = st.tabs(["💬 Chatbot", "📈 Market Analysis"])
 # ==================================================
 with tab_chatbot:
     st.markdown("Ask questions about SEBI insider trading rules, judgments, and compliance scenarios.")
+
+    # 🔄 CLEAR CHAT BUTTON
+    if st.button("🔄 Clear chat"):
+        st.session_state.chat_history = []
+        CHAT_MEMORY.clear()
+        st.rerun()
 
     # ---- state init ----
     if "chat_history" not in st.session_state:
@@ -242,5 +249,5 @@ with tab_chart:
         "⚠️ This analysis is indicative only, and may make mistakes. It does not constitute legal or investment advice."
         "</div>",
         unsafe_allow_html=True
-
     )
+
