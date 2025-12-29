@@ -13,14 +13,19 @@ import altair as alt
 
 from llm_client import call_openrouter
 
-MODEL_SEBI = "mistralai/mistral-7b-instruct:free"
-MODEL_ANOMALY = "mistralai/mistral-7b-instruct:free"
+MODEL_SEBI = "google/gemma-3-27b-it:free"
+MODEL_ANOMALY = "google/gemma-3-27b-it:free"
 
 FIXED_CONTAMINATION = 0.01
 CACHE_FILE = "explanations_cache.json"
 
 CHAT_MEMORY = []
 MAX_TURNS = 6
+
+# Truncation sizes to keep prompt length reasonable
+DOC_TRUNCATE_CHARS = 3000         # for long regulation PDFs
+CASE_PDF_TRUNCATE_CHARS = 1500    # for case PDF extracts
+
 
 SYSTEM_PROMPT = """
 You are an insider trading compliance analyst focused on SEBI regulations.
@@ -90,7 +95,9 @@ def case_matches_query(case_label: str, query: str) -> bool:
     q = query.lower()
     tokens = [
         t.lower()
-        for t in case_label.replace("-", " ").replace(".", " ").split()
+        for t in case_label.replace("-", " ")
+        .replace(".", " ")
+        .split()
         if len(t) > 3
     ]
     return any(tok in q for tok in tokens)
@@ -118,6 +125,13 @@ def extract_primary_case_label(query: str, case_labels: list[str]):
     scored.sort(reverse=True)
     return scored[0][1]
 
+def _truncate(text: str, n: int):
+    if not text:
+        return ""
+    if len(text) <= n:
+        return text
+    return text[:n].rsplit("\n", 1)[0] + "\n\n...[truncated]..."
+
 # ---------------- Document stores ----------------
 REGULATION_DOCS = []
 CASE_SUMMARY_DOCS = []
@@ -135,9 +149,11 @@ REGULATION_FILES = {
 for fname, label in REGULATION_FILES.items():
     path = os.path.join(REGULATION_DIR, fname)
     if os.path.exists(path):
+        text = extract_pdf_text(path)
         REGULATION_DOCS.append({
             "label": label,
-            "content": extract_pdf_text(path)
+            # store full locally, but when using in prompts we will truncate
+            "content": text
         })
 
 # ---------------- Excel case summaries ----------------
@@ -169,10 +185,16 @@ if os.path.exists(CASE_PDF_DIR):
     for file in os.listdir(CASE_PDF_DIR):
         if file.lower().endswith(".pdf"):
             path = os.path.join(CASE_PDF_DIR, file)
+            # store path, label, and full content locally, but we'll send only an extract
+            try:
+                content = extract_pdf_text(path)
+            except Exception:
+                # protect against corrupted files causing module import to fail
+                content = ""
             CASE_PDF_DOCS.append({
                 "label": clean_label(file),
                 "path": path,
-                "content": extract_pdf_text(path)
+                "content": content
             })
 
 # ---------------- Intent detection ----------------
@@ -187,6 +209,7 @@ def needs_case_rag(query: str) -> bool:
         "supreme court", "sebi order"]
     return any(k in query.lower() for k in keywords)
 
+
 # ---------------- Main chatbot ----------------
 def analyze_sebi_query(query: str) -> dict:
     messages = [
@@ -197,43 +220,49 @@ def analyze_sebi_query(query: str) -> dict:
     used_sources = []
     used_case_files = []
 
+    # Add regulation docs only when needed, but truncated
     if needs_regulation_rag(query):
         for doc in REGULATION_DOCS:
+            truncated = _truncate(doc["content"], DOC_TRUNCATE_CHARS)
             messages.append({
                 "role": "assistant",
-                "content": f"AUTHORITATIVE REGULATION:\n{doc['content']}"
+                "content": f"AUTHORITATIVE REGULATION (excerpt):\n{truncated}\n\n(Full regulation document is stored locally.)"
             })
             used_sources.append(doc["label"])
 
     if needs_case_rag(query):
+        # case summaries (from excel) - include those that match token filter
         for doc in CASE_SUMMARY_DOCS:
             if case_matches_query(doc["label"], query):
+                truncated = _truncate(doc["content"], DOC_TRUNCATE_CHARS)
                 messages.append({
                     "role": "assistant",
-                    "content": f"AUTHORITATIVE CASE SUMMARY:\n{doc['content']}"
+                    "content": f"AUTHORITATIVE CASE SUMMARY:\n{truncated}"
                 })
                 used_sources.append(doc["label"])
 
-        primary_case = extract_primary_case_label(
-            query,
-            [doc["label"] for doc in CASE_PDF_DOCS]
-        )
+        # choose exactly one case PDF to include in prompt (short extract) to avoid sending all PDFs
+        case_labels = [doc["label"] for doc in CASE_PDF_DOCS]
+        primary_case = extract_primary_case_label(query, case_labels)
 
         if primary_case:
             for doc in CASE_PDF_DOCS:
                 if doc["label"] == primary_case:
+                    excerpt = _truncate(doc.get("content", ""), CASE_PDF_TRUNCATE_CHARS)
                     messages.append({
                         "role": "assistant",
-                        "content": f"AUTHORITATIVE CASE DOCUMENT:\n{doc['content']}"
+                        "content": f"AUTHORITATIVE CASE DOCUMENT (excerpt):\n{excerpt}\n\n(Full PDF is available for download if required.)"
                     })
                     used_sources.append(doc["label"])
                     used_case_files.append(doc)
 
+    # conversational memory
     for m in CHAT_MEMORY[-MAX_TURNS:]:
         messages.append(m)
 
     messages.append({"role": "user", "content": query})
 
+    # Call LLM
     reply = call_openrouter(messages, MODEL_SEBI)
 
     if used_sources:
